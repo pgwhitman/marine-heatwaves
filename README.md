@@ -16,3 +16,9 @@ state.py : Defines dataclass State which contains complete information at any ti
 time_evolution.py : Functions associated with evolving in time  
 
 requirement.txt contains packages that must be installed
+
+
+Potential updates:  
+-Coriolis parameter is currently constant - can change this  
+-Currently periodic B.C.s If coriolis changes, won't work so might need to change to fixed for 2 sides  
+-Create better plotting routines  
