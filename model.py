@@ -9,12 +9,12 @@ from operators import (
     cell_to_yface,
     xface_to_cell,
     yface_to_cell,
-    cell_to_corner,
     corner_to_xface,
     corner_to_yface,
     centred_grad_x,
     centred_grad_y,
 )
+
 
 class Model:
     def __init__(self, config, b):
@@ -28,17 +28,17 @@ class Model:
 
     def rhs(self, state):
         """
-        Calculate the time derivatives of D, u, v and gamma.
+        Calculate the time derivatives of D, u, v and Q.
 
-        D, gamma: cell-centred
-        u:        x-face-centred
-        v:        y-face-centred
+        D, Q: cell-centred
+        u:    x-face-centred
+        v:    y-face-centred
         """
 
         D = state.D
         u = state.u
         v = state.v
-        gamma = state.gamma
+        Q = state.Q
 
         eps = self.epsilon
         dx = self.dx
@@ -49,6 +49,9 @@ class Model:
 
         if np.any(D <= 0.0):
             raise ValueError("Depth D must remain positive.")
+
+        # Recover buoyancy from Q = D*gamma.
+        gamma = Q / D
 
         # --------------------------------------------------
         # 1. Continuity equation
@@ -64,21 +67,20 @@ class Model:
         D_t = -div(flux_x, flux_y, dx, dy)
 
         # --------------------------------------------------
-        # 2. Buoyancy advection equation
-        #       gamma_t = - u . grad(gamma)
+        # 2. Conservative buoyancy equation
+        #       Q_t = - div(Q u)
         # --------------------------------------------------
 
-        u_cell = xface_to_cell(u)
-        v_cell = yface_to_cell(v)
+        Q_xface = cell_to_xface(Q)
+        Q_yface = cell_to_yface(Q)
 
-        gamma_x = centred_grad_x(gamma, dx)
-        gamma_y = centred_grad_y(gamma, dy)
+        Q_flux_x = Q_xface * u
+        Q_flux_y = Q_yface * v
 
-        gamma_t = -(u_cell * gamma_x + v_cell * gamma_y)
+        Q_t = -div(Q_flux_x, Q_flux_y, dx, dy)
 
         # --------------------------------------------------
         # 3. Relative vorticity at grid corners
-        #
         #       zeta = dv/dx - du/dy
         # --------------------------------------------------
 
@@ -87,19 +89,15 @@ class Model:
             - (np.roll(u, -1, axis=0) - u) / dy
         )
 
-        # Absolute canonical vorticity:
-        #       curl(v_c) = (epsilon*zeta + f0) k
+        # Absolute canonical vorticity.
         omega = eps * zeta + self.f0
 
-        # Interpolate vorticity to the velocity locations.
+        # Interpolate vorticity to velocity locations.
         omega_xface = corner_to_xface(omega)
         omega_yface = corner_to_yface(omega)
 
         # --------------------------------------------------
         # 4. Construct H and A at cell centres
-        #
-        # H = epsilon/2 |u|^2 + (D-b)*gamma^2
-        # A = (D-b)^2 / (2D)
         # --------------------------------------------------
 
         u_cell = xface_to_cell(u)
@@ -118,7 +116,6 @@ class Model:
         # 5. Momentum equation: x-component
         # --------------------------------------------------
 
-        # Interpolate y-velocity to x-faces.
         v_xface = cell_to_xface(yface_to_cell(v))
 
         H_x = grad_x(H, dx)
@@ -136,7 +133,6 @@ class Model:
         # 6. Momentum equation: y-component
         # --------------------------------------------------
 
-        # Interpolate x-velocity to y-faces.
         u_yface = cell_to_yface(xface_to_cell(u))
 
         H_y = grad_y(H, dy)
@@ -154,5 +150,5 @@ class Model:
             D=D_t,
             u=u_t,
             v=v_t,
-            gamma=gamma_t,
+            Q=Q_t,
         )
