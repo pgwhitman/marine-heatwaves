@@ -22,6 +22,7 @@ def initialise(grid, config):
         background=1.0
     )
 
+    #u and v are horizontal and vertical velocity, not vector u and v
     u = np.zeros((config.ny, config.nx))
     v = np.zeros((config.ny, config.nx))
 
